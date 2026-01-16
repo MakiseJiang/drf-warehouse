@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted } from 'vue'
 import http from '../http'
 import { ElMessage } from 'element-plus'
 
-// --- Transaction History ---
+// --- Types ---
 interface Transaction {
   id: number
   transaction_type: 'IN' | 'OUT'
@@ -13,10 +13,74 @@ interface Transaction {
   material_code: string
 }
 
-const history = ref<Transaction[]>([])
+interface Material {
+  id: number
+  material_id: string
+  name: string
+  quantity: number
+}
+
+interface NewMaterialForm {
+  material_id: string
+  name: string
+  model_number: string
+  category: string
+  equipment: string
+  warehouse: string
+  shelf: string
+  threshold: number
+}
+
+interface PendingItem {
+  _key: number
+  type: 'IN' | 'OUT'
+  isNew: boolean
+  materialId?: number // ID of existing material
+  existingMaterialName?: string // For display
+  newMaterialData?: NewMaterialForm // Data for new material
+  quantity: number
+}
+
+// --- State ---
+const activeTab = ref('new')
 const loadingHistory = ref(false)
+const history = ref<Transaction[]>([])
 const historyPage = ref(1)
 const historyTotal = ref(0)
+const materials = ref<Material[]>([])
+
+// Transaction Form State
+const transType = ref<'IN' | 'OUT'>('IN')
+const isNewMaterial = ref(false)
+const selectedMaterialId = ref<number | null>(null)
+const transQuantity = ref(1)
+const submitting = ref(false)
+
+// New Material Form State
+const newMaterialForm = ref<NewMaterialForm>({
+  material_id: '',
+  name: '',
+  model_number: '',
+  category: '',
+  equipment: '',
+  warehouse: '',
+  shelf: '',
+  threshold: 10
+})
+
+// Pending List
+const pendingList = ref<PendingItem[]>([])
+
+// --- Actions ---
+
+const fetchMaterials = async () => {
+  try {
+    const response = await http.get('/materials/?page_size=1000')
+    materials.value = response.data.results
+  } catch (error) {
+    console.error('加载备品失败')
+  }
+}
 
 const fetchHistory = async () => {
   loadingHistory.value = true
@@ -38,43 +102,119 @@ const handlePageChange = (page: number) => {
   fetchHistory()
 }
 
-// --- New Transaction ---
-const activeTab = ref('new')
-const transactionForm = ref({
-  type: 'IN',
-  material_id: null as number | null,
-  quantity: 1,
-})
-const materials = ref<any[]>([])
-
-const fetchMaterials = async () => {
-  try {
-    const response = await http.get('/materials/?page_size=1000')
-    materials.value = response.data.results
-  } catch (error) {
-    console.error('加载备品失败')
+const handleTypeChange = (val: 'IN' | 'OUT') => {
+  if (val === 'OUT') {
+    isNewMaterial.value = false
   }
 }
 
-const submitTransaction = async () => {
-  if (!transactionForm.value.material_id) {
-    ElMessage.warning('请选择备品')
+const addToPending = () => {
+  // Validation
+  if (transType.value === 'IN' && isNewMaterial.value) {
+    // Validate New Material Form
+    const f = newMaterialForm.value
+    if (!f.material_id || !f.name || !f.category) {
+      ElMessage.warning('请填写必填项 (备品ID, 名称, 类型)')
+      return
+    }
+    // Add to list
+    pendingList.value.push({
+      _key: Date.now(),
+      type: 'IN',
+      isNew: true,
+      newMaterialData: { ...f },
+      quantity: transQuantity.value
+    })
+    // Reset New Material Form essential fields
+    newMaterialForm.value.material_id = ''
+    newMaterialForm.value.name = ''
+    newMaterialForm.value.model_number = ''
+  } else {
+    // Existing Material
+    if (!selectedMaterialId.value) {
+      ElMessage.warning('请选择备品')
+      return
+    }
+    const mat = materials.value.find(m => m.id === selectedMaterialId.value)
+    
+    // Check stock for OUT
+    if (transType.value === 'OUT' && mat && mat.quantity < transQuantity.value) {
+      ElMessage.warning(`库存不足 (当前: ${mat.quantity})`)
+      return
+    }
+
+    pendingList.value.push({
+      _key: Date.now(),
+      type: transType.value,
+      isNew: false,
+      materialId: selectedMaterialId.value,
+      existingMaterialName: mat ? `${mat.material_id} - ${mat.name}` : 'Unknown',
+      quantity: transQuantity.value
+    })
+    // Reset selection
+    selectedMaterialId.value = null
+  }
+  
+  // Reset common fields
+  transQuantity.value = 1
+  ElMessage.success('已加入待提交列表')
+}
+
+const removeFromPending = (index: number) => {
+  pendingList.value.splice(index, 1)
+}
+
+const submitBatch = async () => {
+  if (pendingList.value.length === 0) {
+    ElMessage.warning('请先添加待提交记录')
     return
   }
+
+  submitting.value = true
+
   try {
-    await http.post('/transactions/', {
-      material: transactionForm.value.material_id,
-      transaction_type: transactionForm.value.type,
-      quantity: transactionForm.value.quantity
-    })
-    ElMessage.success('提交成功')
-    // Reset form
-    transactionForm.value.material_id = null
-    transactionForm.value.quantity = 1
-    // Refresh history
+    for (const item of pendingList.value) {
+      let materialId = item.materialId
+
+      // 1. If new material, create it first
+      if (item.isNew && item.newMaterialData) {
+        // Create with quantity 0 first, so transaction adds to it
+        // Check if material ID already exists in DB? The API will throw error.
+        try {
+            const createRes = await http.post('/materials/', {
+            ...item.newMaterialData,
+            quantity: 0 
+            })
+            materialId = createRes.data.id
+        } catch (e) {
+            console.error('Create material failed', e)
+            throw new Error(`创建备品 ${item.newMaterialData.name} 失败，可能ID重复`)
+        }
+      }
+
+      // 2. Create Transaction
+      if (materialId) {
+        await http.post('/transactions/', {
+          material: materialId,
+          transaction_type: item.type,
+          quantity: item.quantity
+        })
+      }
+    }
+
+    ElMessage.success('批量提交成功')
+    pendingList.value = []
+    fetchMaterials()
     fetchHistory()
-  } catch (error) {
-    ElMessage.error('提交失败')
+    
+  } catch (error: any) {
+    console.error(error)
+    ElMessage.error(error.message || '提交过程中发生错误')
+    // Refresh to show what was saved
+    fetchMaterials()
+    fetchHistory()
+  } finally {
+    submitting.value = false
   }
 }
 
@@ -88,38 +228,130 @@ onMounted(() => {
   <div class="transactions-container">
     <el-tabs v-model="activeTab" type="border-card">
       <el-tab-pane label="新建出入库" name="new">
-        <el-form :model="transactionForm" label-width="120px" style="max-width: 500px">
-          <el-form-item label="操作类型">
-            <el-radio-group v-model="transactionForm.type">
-              <el-radio-button label="IN">入库</el-radio-button>
-              <el-radio-button label="OUT">出库</el-radio-button>
-            </el-radio-group>
-          </el-form-item>
-          
-          <el-form-item label="选择备品">
-            <el-select 
-              v-model="transactionForm.material_id" 
-              placeholder="请选择备品" 
-              filterable
-              style="width: 100%"
-            >
-              <el-option
-                v-for="item in materials"
-                :key="item.id"
-                :label="`${item.material_id} - ${item.name} (库存: ${item.quantity})`"
-                :value="item.id"
-              />
-            </el-select>
-          </el-form-item>
+        <div class="new-transaction-layout">
+          <!-- Left: Input Form -->
+          <div class="form-section">
+            <el-form label-width="100px">
+              <el-form-item label="操作类型">
+                <el-radio-group v-model="transType" @change="handleTypeChange">
+                  <el-radio-button label="IN">入库</el-radio-button>
+                  <el-radio-button label="OUT">出库</el-radio-button>
+                </el-radio-group>
+              </el-form-item>
 
-          <el-form-item label="数量">
-            <el-input-number v-model="transactionForm.quantity" :min="1" />
-          </el-form-item>
+              <!-- New Material Toggle (Only for IN) -->
+              <el-form-item v-if="transType === 'IN'" label="备品来源">
+                <el-radio-group v-model="isNewMaterial">
+                  <el-radio :label="false">已有备品</el-radio>
+                  <el-radio :label="true">新备品</el-radio>
+                </el-radio-group>
+              </el-form-item>
+              
+              <!-- Existing Material Selector -->
+              <template v-if="!isNewMaterial">
+                <el-form-item label="选择备品">
+                  <el-select 
+                    v-model="selectedMaterialId" 
+                    placeholder="请选择备品" 
+                    filterable
+                    style="width: 100%"
+                  >
+                    <el-option
+                      v-for="item in materials"
+                      :key="item.id"
+                      :label="`${item.material_id} - ${item.name} (库存: ${item.quantity})`"
+                      :value="item.id"
+                    />
+                  </el-select>
+                </el-form-item>
+              </template>
 
-          <el-form-item>
-            <el-button type="primary" @click="submitTransaction">提交</el-button>
-          </el-form-item>
-        </el-form>
+              <!-- New Material Form -->
+              <template v-else>
+                <div class="new-material-form">
+                  <el-form-item label="备品ID" required>
+                    <el-input v-model="newMaterialForm.material_id" placeholder="唯一编号 (如 M100)" />
+                  </el-form-item>
+                  <el-form-item label="名称" required>
+                    <el-input v-model="newMaterialForm.name" placeholder="备品名称" />
+                  </el-form-item>
+                  <el-form-item label="型号">
+                    <el-input v-model="newMaterialForm.model_number" />
+                  </el-form-item>
+                  <el-form-item label="类型" required>
+                    <el-input v-model="newMaterialForm.category" placeholder="如: 五金" />
+                  </el-form-item>
+                  <el-form-item label="所属设备">
+                    <el-input v-model="newMaterialForm.equipment" />
+                  </el-form-item>
+                  <el-row :gutter="20">
+                    <el-col :span="12">
+                      <el-form-item label="仓库" label-width="60px">
+                        <el-input v-model="newMaterialForm.warehouse" />
+                      </el-form-item>
+                    </el-col>
+                    <el-col :span="12">
+                      <el-form-item label="货架" label-width="60px">
+                        <el-input v-model="newMaterialForm.shelf" />
+                      </el-form-item>
+                    </el-col>
+                  </el-row>
+                  <el-form-item label="阈值">
+                    <el-input-number v-model="newMaterialForm.threshold" :min="0" />
+                  </el-form-item>
+                </div>
+              </template>
+
+              <el-form-item label="数量" required>
+                <el-input-number v-model="transQuantity" :min="1" style="width: 100%" />
+              </el-form-item>
+
+              <el-form-item>
+                <el-button type="success" @click="addToPending" icon="Plus" plain>加入清单</el-button>
+              </el-form-item>
+            </el-form>
+          </div>
+
+          <!-- Right: Pending List -->
+          <div class="list-section">
+            <div class="list-header">
+              <h3>待提交清单</h3>
+              <el-button
+                type="primary"
+                @click="submitBatch"
+                :disabled="pendingList.length === 0"
+                :loading="submitting"
+              >
+                全部提交 ({{ pendingList.length }})
+              </el-button>
+            </div>
+            
+            <el-table :data="pendingList" border style="width: 100%; height: 400px; overflow-y: auto;">
+              <el-table-column label="类型" width="70">
+                <template #default="{ row }">
+                  <el-tag :type="row.type === 'IN' ? 'success' : 'warning'" size="small">{{ row.type === 'IN' ? '入' : '出' }}</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="备品信息">
+                <template #default="{ row }">
+                  <div v-if="row.isNew">
+                    <el-tag size="small" effect="plain">新</el-tag> 
+                    {{ row.newMaterialData.material_id }} - {{ row.newMaterialData.name }}
+                  </div>
+                  <div v-else>
+                    {{ row.existingMaterialName }}
+                  </div>
+                </template>
+              </el-table-column>
+              <el-table-column prop="quantity" label="数量" width="80" />
+              <el-table-column label="操作" width="60">
+                <template #default="{ $index }">
+                  <el-button type="danger" link icon="Delete" @click="removeFromPending($index)" />
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
+        </div>
       </el-tab-pane>
 
       <el-tab-pane label="历史记录" name="history">
@@ -158,9 +390,47 @@ onMounted(() => {
 .transactions-container {
   padding: 20px;
 }
+.new-transaction-layout {
+  display: flex;
+  gap: 20px;
+}
+.form-section {
+  flex: 1;
+  max-width: 500px;
+  border-right: 1px solid #eee;
+  padding-right: 20px;
+}
+.list-section {
+  flex: 1;
+}
+.list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.new-material-form {
+  border: 1px dashed #dcdfe6;
+  padding: 15px;
+  border-radius: 4px;
+  margin-bottom: 18px;
+  background-color: #fafafa;
+}
 .pagination {
   margin-top: 20px;
   display: flex;
   justify-content: flex-end;
+}
+@media (max-width: 768px) {
+  .new-transaction-layout {
+    flex-direction: column;
+  }
+  .form-section {
+    border-right: none;
+    border-bottom: 1px solid #eee;
+    padding-right: 0;
+    padding-bottom: 20px;
+    max-width: 100%;
+  }
 }
 </style>
