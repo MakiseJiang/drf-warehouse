@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import http from '../http'
 import { ElMessage } from 'element-plus'
+import warehouses from '../config/warehouses.json'
 
 // --- Types ---
 interface Transaction {
@@ -11,6 +12,8 @@ interface Transaction {
   date: string
   material_name: string
   material_code: string
+  remark?: string
+  operator?: string
 }
 
 interface Material {
@@ -18,6 +21,7 @@ interface Material {
   material_id: string
   name: string
   quantity: number
+  warehouse?: string
 }
 
 interface NewMaterialForm {
@@ -39,6 +43,8 @@ interface PendingItem {
   existingMaterialName?: string // For display
   newMaterialData?: NewMaterialForm // Data for new material
   quantity: number
+  remark?: string
+  operator?: string
 }
 
 // --- State ---
@@ -54,6 +60,8 @@ const transType = ref<'IN' | 'OUT'>('IN')
 const isNewMaterial = ref(false)
 const selectedMaterialId = ref<number | null>(null)
 const transQuantity = ref(1)
+const operatorName = ref('')
+const transactionRemark = ref('')
 const submitting = ref(false)
 
 // New Material Form State
@@ -65,7 +73,7 @@ const newMaterialForm = ref<NewMaterialForm>({
   equipment: '',
   warehouse: '',
   shelf: '',
-  threshold: 10
+  threshold: 1
 })
 
 // Pending List
@@ -113,8 +121,10 @@ const addToPending = () => {
   if (transType.value === 'IN' && isNewMaterial.value) {
     // Validate New Material Form
     const f = newMaterialForm.value
-    if (!f.material_id || !f.name || !f.category) {
-      ElMessage.warning('请填写必填项 (备品ID, 名称, 类型)')
+    // User required: Name, Model, Warehouse.
+    // System required: Material ID, Category.
+    if (!f.name || !f.model_number || !f.warehouse) {
+      ElMessage.warning('请填写所有必填项 (ID, 名称, 型号, 类型, 仓库)')
       return
     }
     // Add to list
@@ -123,12 +133,20 @@ const addToPending = () => {
       type: 'IN',
       isNew: true,
       newMaterialData: { ...f },
-      quantity: transQuantity.value
+      quantity: transQuantity.value,
+      remark: transactionRemark.value,
+      operator: operatorName.value
     })
     // Reset New Material Form essential fields
     newMaterialForm.value.material_id = ''
     newMaterialForm.value.name = ''
     newMaterialForm.value.model_number = ''
+    // Keep category/warehouse as they might be reused? Or reset. Let's reset for safety.
+    newMaterialForm.value.category = ''
+    newMaterialForm.value.warehouse = ''
+    newMaterialForm.value.equipment = ''
+    newMaterialForm.value.shelf = ''
+    newMaterialForm.value.threshold = 1
   } else {
     // Existing Material
     if (!selectedMaterialId.value) {
@@ -149,7 +167,9 @@ const addToPending = () => {
       isNew: false,
       materialId: selectedMaterialId.value,
       existingMaterialName: mat ? `${mat.material_id} - ${mat.name}` : 'Unknown',
-      quantity: transQuantity.value
+      quantity: transQuantity.value,
+      remark: transactionRemark.value,
+      operator: operatorName.value
     })
     // Reset selection
     selectedMaterialId.value = null
@@ -157,6 +177,8 @@ const addToPending = () => {
   
   // Reset common fields
   transQuantity.value = 1
+  transactionRemark.value = ''
+  // operatorName.value is NOT reset, convenient for batch entry
   ElMessage.success('已加入待提交列表')
 }
 
@@ -178,8 +200,6 @@ const submitBatch = async () => {
 
       // 1. If new material, create it first
       if (item.isNew && item.newMaterialData) {
-        // Create with quantity 0 first, so transaction adds to it
-        // Check if material ID already exists in DB? The API will throw error.
         try {
             const createRes = await http.post('/materials/', {
             ...item.newMaterialData,
@@ -197,7 +217,9 @@ const submitBatch = async () => {
         await http.post('/transactions/', {
           material: materialId,
           transaction_type: item.type,
-          quantity: item.quantity
+          quantity: item.quantity,
+          remark: item.remark || '',
+          operator: item.operator || ''
         })
       }
     }
@@ -210,7 +232,6 @@ const submitBatch = async () => {
   } catch (error: any) {
     console.error(error)
     ElMessage.error(error.message || '提交过程中发生错误')
-    // Refresh to show what was saved
     fetchMaterials()
     fetchHistory()
   } finally {
@@ -269,33 +290,33 @@ onMounted(() => {
               <!-- New Material Form -->
               <template v-else>
                 <div class="new-material-form">
-                  <el-form-item label="备品ID" required>
-                    <el-input v-model="newMaterialForm.material_id" placeholder="唯一编号 (如 M100)" />
-                  </el-form-item>
+                  <div class="form-section-title">必填项</div>
                   <el-form-item label="名称" required>
                     <el-input v-model="newMaterialForm.name" placeholder="备品名称" />
                   </el-form-item>
-                  <el-form-item label="型号">
-                    <el-input v-model="newMaterialForm.model_number" />
+                  <el-form-item label="型号" required>
+                    <el-input v-model="newMaterialForm.model_number" placeholder="规格型号" />
                   </el-form-item>
-                  <el-form-item label="类型" required>
-                    <el-input v-model="newMaterialForm.category" placeholder="如: 五金" />
+                  <el-form-item label="仓库" required>
+                    <el-select v-model="newMaterialForm.warehouse" placeholder="选择仓库" style="width: 100%">
+                      <el-option v-for="wh in warehouses" :key="wh" :label="wh" :value="wh" />
+                    </el-select>
                   </el-form-item>
+                  
+                  <div class="form-section-title" style="margin-top: 15px">选填项</div>
                   <el-form-item label="所属设备">
                     <el-input v-model="newMaterialForm.equipment" />
                   </el-form-item>
-                  <el-row :gutter="20">
-                    <el-col :span="12">
-                      <el-form-item label="仓库" label-width="60px">
-                        <el-input v-model="newMaterialForm.warehouse" />
-                      </el-form-item>
-                    </el-col>
-                    <el-col :span="12">
-                      <el-form-item label="货架" label-width="60px">
-                        <el-input v-model="newMaterialForm.shelf" />
-                      </el-form-item>
-                    </el-col>
-                  </el-row>
+                  <el-form-item label="类型">
+                    <el-input v-model="newMaterialForm.category" placeholder="如: 五金" />
+                  </el-form-item>
+                  
+                  <el-form-item label="物料号" >
+                    <el-input v-model="newMaterialForm.material_id" />
+                  </el-form-item>
+                  <el-form-item label="货架">
+                    <el-input v-model="newMaterialForm.shelf" />
+                  </el-form-item>
                   <el-form-item label="阈值">
                     <el-input-number v-model="newMaterialForm.threshold" :min="0" />
                   </el-form-item>
@@ -304,6 +325,14 @@ onMounted(() => {
 
               <el-form-item label="数量" required>
                 <el-input-number v-model="transQuantity" :min="1" style="width: 100%" />
+              </el-form-item>
+
+              <el-form-item label="操作人">
+                <el-input v-model="operatorName" placeholder="请输入操作人姓名" />
+              </el-form-item>
+              
+              <el-form-item label="备注">
+                <el-input v-model="transactionRemark" type="textarea" :rows="2" placeholder="备注信息" />
               </el-form-item>
 
               <el-form-item>
@@ -326,13 +355,13 @@ onMounted(() => {
               </el-button>
             </div>
             
-            <el-table :data="pendingList" border style="width: 100%; height: 400px; overflow-y: auto;">
+            <el-table :data="pendingList" border style="width: 100%; height: 500px; overflow-y: auto;">
               <el-table-column label="类型" width="70">
                 <template #default="{ row }">
                   <el-tag :type="row.type === 'IN' ? 'success' : 'warning'" size="small">{{ row.type === 'IN' ? '入' : '出' }}</el-tag>
                 </template>
               </el-table-column>
-              <el-table-column label="备品信息">
+              <el-table-column label="备品信息" min-width="150">
                 <template #default="{ row }">
                   <div v-if="row.isNew">
                     <el-tag size="small" effect="plain">新</el-tag> 
@@ -343,7 +372,9 @@ onMounted(() => {
                   </div>
                 </template>
               </el-table-column>
-              <el-table-column prop="quantity" label="数量" width="80" />
+              <el-table-column prop="quantity" label="数量" width="70" />
+              <el-table-column prop="operator" label="操作人" width="80" />
+              <el-table-column prop="remark" label="备注" />
               <el-table-column label="操作" width="60">
                 <template #default="{ $index }">
                   <el-button type="danger" link icon="Delete" @click="removeFromPending($index)" />
@@ -356,21 +387,23 @@ onMounted(() => {
 
       <el-tab-pane label="历史记录" name="history">
         <el-table :data="history" v-loading="loadingHistory" style="width: 100%">
-          <el-table-column prop="date" label="时间" width="180">
+          <el-table-column prop="date" label="时间" width="160">
             <template #default="scope">
               {{ new Date(scope.row.date).toLocaleString() }}
             </template>
           </el-table-column>
-          <el-table-column prop="transaction_type" label="类型" width="100">
+          <el-table-column prop="transaction_type" label="类型" width="80">
             <template #default="scope">
               <el-tag :type="scope.row.transaction_type === 'IN' ? 'success' : 'warning'">
                 {{ scope.row.transaction_type === 'IN' ? '入库' : '出库' }}
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column prop="material_code" label="备品ID" width="120" />
-          <el-table-column prop="material_name" label="备品名称" />
-          <el-table-column prop="quantity" label="数量" width="120" />
+          <el-table-column prop="material_code" label="备品ID" width="100" />
+          <el-table-column prop="material_name" label="备品名称" width="120" />
+          <el-table-column prop="quantity" label="数量" width="80" />
+          <el-table-column prop="operator" label="操作人" width="100" />
+          <el-table-column prop="remark" label="备注" />
         </el-table>
         <div class="pagination">
           <el-pagination
@@ -415,6 +448,13 @@ onMounted(() => {
   border-radius: 4px;
   margin-bottom: 18px;
   background-color: #fafafa;
+}
+.form-section-title {
+  font-size: 12px;
+  color: #909399;
+  margin-bottom: 10px;
+  border-bottom: 1px solid #ebeef5;
+  padding-bottom: 5px;
 }
 .pagination {
   margin-top: 20px;

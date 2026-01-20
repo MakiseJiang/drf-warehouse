@@ -25,6 +25,8 @@ class Transaction(models.Model):
     transaction_type = models.CharField(max_length=3, choices=TRANSACTION_TYPES)
     quantity = models.IntegerField()
     date = models.DateTimeField(auto_now_add=True)
+    remark = models.TextField(blank=True, default='')
+    operator = models.CharField(max_length=100, blank=True, default='')
     
     def __str__(self):
         return f"{self.transaction_type} - {self.material.name} - {self.quantity}"
