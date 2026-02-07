@@ -1,12 +1,13 @@
+import os
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = 'dev-secret-key-change-in-prod'
 
-DEBUG = True
+DEBUG = False
 
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = ['111.229.57.83']
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -81,6 +82,8 @@ USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = 'static/'
+
+STATIC_ROOT = os.path.join(BASE_DIR, 'static_collect')
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 

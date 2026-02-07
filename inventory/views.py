@@ -9,7 +9,7 @@ class MaterialViewSet(viewsets.ModelViewSet):
     queryset = Material.objects.all().order_by('id')
     serializer_class = MaterialSerializer
     filter_backends = [filters.SearchFilter]
-    search_fields = ['material_id', 'name', 'model_number', 'category', 'equipment', 'warehouse', 'shelf']
+    search_fields = ['material_id', 'name', 'model_number', 'usage', 'warehouse', 'shelf']
 
 
 class TransactionViewSet(viewsets.ModelViewSet):

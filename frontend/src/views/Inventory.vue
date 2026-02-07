@@ -7,8 +7,7 @@ interface Material {
   id: number
   material_id: string
   name: string
-  category: string
-  equipment: string
+  usage: string
   warehouse: string
   shelf: string
   quantity: number
@@ -49,7 +48,7 @@ onMounted(() => {
     <div class="filter-bar">
       <el-input
         v-model="searchQuery"
-        placeholder="搜索 ID, 名称, 类型..."
+        placeholder="搜索 ID, 名称, 用途..."
         style="width: 300px"
         clearable
         @keyup.enter="handleSearch"
@@ -63,8 +62,7 @@ onMounted(() => {
     <el-table :data="materials" v-loading="loading" style="width: 100%" stripe border>
       <el-table-column prop="material_id" label="备品ID" width="100" />
       <el-table-column prop="name" label="名称" />
-      <el-table-column prop="category" label="类型" width="120" />
-      <el-table-column prop="equipment" label="所属设备" width="120" />
+      <el-table-column prop="usage" label="用途" width="150" />
       <el-table-column prop="warehouse" label="仓库" width="100" />
       <el-table-column prop="shelf" label="货架" width="100" />
       <el-table-column prop="quantity" label="库存" width="100" />

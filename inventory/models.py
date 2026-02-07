@@ -2,11 +2,10 @@ from django.db import models
 
 
 class Material(models.Model):
-    material_id = models.CharField(max_length=100, unique=True)
+    material_id = models.CharField(max_length=100, blank=True, default='')
     name = models.CharField(max_length=200)
     model_number = models.CharField(max_length=200, blank=True, default='')
-    category = models.CharField(max_length=100)
-    equipment = models.CharField(max_length=200, blank=True, default='')
+    usage = models.CharField(max_length=200, blank=True, default='')
     warehouse = models.CharField(max_length=100, blank=True, default='')
     shelf = models.CharField(max_length=100, blank=True, default='')
     quantity = models.IntegerField()

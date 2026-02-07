@@ -20,7 +20,7 @@ use([
 interface Material {
   id: number
   name: string
-  category: string
+  usage: string
   quantity: number
   threshold: number
 }
@@ -60,18 +60,19 @@ const lowStockItems = computed(() => {
   return materials.value.filter(m => m.quantity < m.threshold)
 })
 
-// Chart 1: Inventory by Category
-const categoryOption = computed(() => {
-  const categoryMap = new Map<string, number>()
+// Chart 1: Inventory by Usage
+const usageOption = computed(() => {
+  const usageMap = new Map<string, number>()
   materials.value.forEach(m => {
-    const count = categoryMap.get(m.category) || 0
-    categoryMap.set(m.category, count + m.quantity)
+    const key = m.usage || '未指定'
+    const count = usageMap.get(key) || 0
+    usageMap.set(key, count + m.quantity)
   })
 
-  const data = Array.from(categoryMap.entries()).map(([name, value]) => ({ name, value }))
+  const data = Array.from(usageMap.entries()).map(([name, value]) => ({ name, value }))
 
   return {
-    title: { text: '库存分类占比', left: 'center' },
+    title: { text: '库存用途占比', left: 'center' },
     tooltip: { trigger: 'item' },
     legend: { orient: 'vertical', left: 'left' },
     series: [
@@ -142,7 +143,7 @@ onMounted(() => {
     <el-row :gutter="20" class="chart-row">
       <el-col :span="12">
         <el-card>
-          <v-chart class="chart" :option="categoryOption" autoresize />
+          <v-chart class="chart" :option="usageOption" autoresize />
         </el-card>
       </el-col>
       <el-col :span="12">

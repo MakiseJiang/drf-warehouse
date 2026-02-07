@@ -28,8 +28,7 @@ interface NewMaterialForm {
   material_id: string
   name: string
   model_number: string
-  category: string
-  equipment: string
+  usage: string
   warehouse: string
   shelf: string
   threshold: number
@@ -69,8 +68,7 @@ const newMaterialForm = ref<NewMaterialForm>({
   material_id: '',
   name: '',
   model_number: '',
-  category: '',
-  equipment: '',
+  usage: '',
   warehouse: '',
   shelf: '',
   threshold: 1
@@ -122,9 +120,9 @@ const addToPending = () => {
     // Validate New Material Form
     const f = newMaterialForm.value
     // User required: Name, Model, Warehouse.
-    // System required: Material ID, Category.
+    // System required: Material ID (can be empty), Usage (optional).
     if (!f.name || !f.model_number || !f.warehouse) {
-      ElMessage.warning('请填写所有必填项 (ID, 名称, 型号, 类型, 仓库)')
+      ElMessage.warning('请填写所有必填项 (名称, 型号, 仓库)')
       return
     }
     // Add to list
@@ -141,10 +139,9 @@ const addToPending = () => {
     newMaterialForm.value.material_id = ''
     newMaterialForm.value.name = ''
     newMaterialForm.value.model_number = ''
-    // Keep category/warehouse as they might be reused? Or reset. Let's reset for safety.
-    newMaterialForm.value.category = ''
+    // Reset other fields
     newMaterialForm.value.warehouse = ''
-    newMaterialForm.value.equipment = ''
+    newMaterialForm.value.usage = ''
     newMaterialForm.value.shelf = ''
     newMaterialForm.value.threshold = 1
   } else {
@@ -304,11 +301,8 @@ onMounted(() => {
                   </el-form-item>
                   
                   <div class="form-section-title" style="margin-top: 15px">选填项</div>
-                  <el-form-item label="所属设备">
-                    <el-input v-model="newMaterialForm.equipment" />
-                  </el-form-item>
-                  <el-form-item label="类型">
-                    <el-input v-model="newMaterialForm.category" placeholder="如: 五金" />
+                  <el-form-item label="用途">
+                    <el-input v-model="newMaterialForm.usage" placeholder="如: 生产设备维修" />
                   </el-form-item>
                   
                   <el-form-item label="物料号" >
