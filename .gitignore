@@ -9,6 +9,8 @@ __pycache__/
 # 打包程序
 码头初期雨水泵*/
 
+
+
 # PyCharm
 .idea/
 
@@ -162,6 +164,19 @@ dmypy.json
 
 # pytype static type analyzer
 .pytype/
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+
+.DS_Store
+*.sqlite3
+media/
+*.pyc
+*.db
+*.pid
 
 # Cython debug symbols
 cython_debug/
