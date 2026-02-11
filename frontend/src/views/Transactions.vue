@@ -2,7 +2,6 @@
 import { ref, onMounted } from 'vue'
 import http from '../http'
 import { ElMessage } from 'element-plus'
-import warehouses from '../config/warehouses.json'
 
 // --- Types ---
 interface Transaction {
@@ -53,6 +52,7 @@ const history = ref<Transaction[]>([])
 const historyPage = ref(1)
 const historyTotal = ref(0)
 const materials = ref<Material[]>([])
+const warehouseList = ref<string[]>([])
 
 // Transaction Form State
 const transType = ref<'IN' | 'OUT'>('IN')
@@ -85,6 +85,15 @@ const fetchMaterials = async () => {
     materials.value = response.data.results
   } catch (error) {
     console.error('加载备品失败')
+  }
+}
+
+const fetchWarehouses = async () => {
+  try {
+    const response = await http.get('/settings/warehouses/')
+    warehouseList.value = response.data
+  } catch (error) {
+    console.error('加载仓库列表失败')
   }
 }
 
@@ -238,6 +247,7 @@ const submitBatch = async () => {
 
 onMounted(() => {
   fetchMaterials()
+  fetchWarehouses()
   fetchHistory()
 })
 </script>
@@ -296,7 +306,7 @@ onMounted(() => {
                   </el-form-item>
                   <el-form-item label="仓库" required>
                     <el-select v-model="newMaterialForm.warehouse" placeholder="选择仓库" style="width: 100%">
-                      <el-option v-for="wh in warehouses" :key="wh" :label="wh" :value="wh" />
+                      <el-option v-for="wh in warehouseList" :key="wh" :label="wh" :value="wh" />
                     </el-select>
                   </el-form-item>
                   
