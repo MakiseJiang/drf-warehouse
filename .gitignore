@@ -9,7 +9,8 @@ __pycache__/
 # 打包程序
 码头初期雨水泵*/
 
-
+# 测试配置
+settings.py
 
 # PyCharm
 .idea/
