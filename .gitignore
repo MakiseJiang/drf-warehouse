@@ -201,4 +201,8 @@ cython_debug/
 #  refer to https://docs.cursor.com/context/ignore-files
 .cursorignore
 .cursorindexingignore
+
+# 开发不用动的文件
 config/settings.py
+config/urls.py
+frontend/vite.config.ts
