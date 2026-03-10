@@ -1,11 +1,12 @@
 <script setup lang="ts">
+defineOptions({ name: 'WarehouseMainLayout' })
+
 import { useAuthStore } from '../stores/auth'
-import { useRouter, useRoute } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { Menu as IconMenu, List, Refresh, SwitchButton, Setting, Fold, Expand } from '@element-plus/icons-vue'
 
 const authStore = useAuthStore()
-const router = useRouter()
 const route = useRoute()
 
 const isCollapse = ref(false)

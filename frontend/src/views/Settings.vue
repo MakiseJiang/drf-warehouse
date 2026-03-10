@@ -1,4 +1,6 @@
 <script setup lang="ts">
+defineOptions({ name: 'WarehouseSettings' })
+
 import { ref, onMounted } from 'vue'
 import http from '../http'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -12,7 +14,7 @@ const fetchWarehouses = async () => {
   try {
     const response = await http.get('/settings/warehouses/')
     warehouses.value = response.data
-  } catch (error) {
+  } catch {
     ElMessage.error('加载仓库列表失败')
   } finally {
     loading.value = false
@@ -32,7 +34,7 @@ const addWarehouse = async () => {
     warehouses.value = updated
     newWarehouse.value = ''
     ElMessage.success('添加成功')
-  } catch (error) {
+  } catch {
     ElMessage.error('添加失败')
   }
 }

@@ -1,7 +1,10 @@
 <script setup lang="ts">
+defineOptions({ name: 'WarehouseTransactions' })
+
 import { ref, onMounted } from 'vue'
 import http from '../http'
 import { ElMessage } from 'element-plus'
+import { Search } from '@element-plus/icons-vue'
 
 // --- Types ---
 interface Transaction {
@@ -19,6 +22,8 @@ interface Material {
   id: number
   material_id: string
   name: string
+  model_number: string
+  usage: string
   quantity: number
   warehouse?: string
 }
@@ -51,17 +56,24 @@ const loadingHistory = ref(false)
 const history = ref<Transaction[]>([])
 const historyPage = ref(1)
 const historyTotal = ref(0)
-const materials = ref<Material[]>([])
 const warehouseList = ref<string[]>([])
 
 // Transaction Form State
 const transType = ref<'IN' | 'OUT'>('IN')
 const isNewMaterial = ref(false)
-const selectedMaterialId = ref<number | null>(null)
+const selectedMaterial = ref<Material | null>(null)
 const transQuantity = ref(1)
 const operatorName = ref('')
 const transactionRemark = ref('')
 const submitting = ref(false)
+
+// Dialog State
+const selectMaterialVisible = ref(false)
+const dialogMaterials = ref<Material[]>([])
+const dialogTotal = ref(0)
+const dialogPage = ref(1)
+const dialogSearch = ref('')
+const dialogLoading = ref(false)
 
 // New Material Form State
 const newMaterialForm = ref<NewMaterialForm>({
@@ -79,20 +91,48 @@ const pendingList = ref<PendingItem[]>([])
 
 // --- Actions ---
 
-const fetchMaterials = async () => {
+const fetchDialogMaterials = async () => {
+  dialogLoading.value = true
   try {
-    const response = await http.get('/materials/?page_size=1000')
-    materials.value = response.data.results
+    const params: any = {
+      page: dialogPage.value,
+      page_size: 10
+    }
+    if (dialogSearch.value) {
+      params.search = dialogSearch.value
+    }
+    const response = await http.get('/materials/', { params })
+    dialogMaterials.value = response.data.results
+    dialogTotal.value = response.data.count
   } catch (error) {
-    console.error('加载备品失败')
+    ElMessage.error('加载备品列表失败')
+  } finally {
+    dialogLoading.value = false
   }
+}
+
+const openMaterialDialog = () => {
+  selectMaterialVisible.value = true
+  dialogPage.value = 1
+  dialogSearch.value = ''
+  fetchDialogMaterials()
+}
+
+const handleDialogPageChange = (page: number) => {
+  dialogPage.value = page
+  fetchDialogMaterials()
+}
+
+const selectMaterial = (material: Material) => {
+  selectedMaterial.value = material
+  selectMaterialVisible.value = false
 }
 
 const fetchWarehouses = async () => {
   try {
     const response = await http.get('/settings/warehouses/')
     warehouseList.value = response.data
-  } catch (error) {
+  } catch {
     console.error('加载仓库列表失败')
   }
 }
@@ -105,7 +145,7 @@ const fetchHistory = async () => {
     })
     history.value = response.data.results
     historyTotal.value = response.data.count
-  } catch (error) {
+  } catch {
     ElMessage.error('获取历史记录失败')
   } finally {
     loadingHistory.value = false
@@ -155,14 +195,14 @@ const addToPending = () => {
     newMaterialForm.value.threshold = 1
   } else {
     // Existing Material
-    if (!selectedMaterialId.value) {
+    if (!selectedMaterial.value) {
       ElMessage.warning('请选择备品')
       return
     }
-    const mat = materials.value.find(m => m.id === selectedMaterialId.value)
+    const mat = selectedMaterial.value
     
     // Check stock for OUT
-    if (transType.value === 'OUT' && mat && mat.quantity < transQuantity.value) {
+    if (transType.value === 'OUT' && mat.quantity < transQuantity.value) {
       ElMessage.warning(`库存不足 (当前: ${mat.quantity})`)
       return
     }
@@ -171,14 +211,14 @@ const addToPending = () => {
       _key: Date.now(),
       type: transType.value,
       isNew: false,
-      materialId: selectedMaterialId.value,
-      existingMaterialName: mat ? `${mat.material_id} - ${mat.name}` : 'Unknown',
+      materialId: mat.id,
+      existingMaterialName: `${mat.material_id || 'ID'} - ${mat.name} (${mat.model_number || '无型号'})`,
       quantity: transQuantity.value,
       remark: transactionRemark.value,
       operator: operatorName.value
     })
     // Reset selection
-    selectedMaterialId.value = null
+    selectedMaterial.value = null
   }
   
   // Reset common fields
@@ -232,13 +272,12 @@ const submitBatch = async () => {
 
     ElMessage.success('批量提交成功')
     pendingList.value = []
-    fetchMaterials()
     fetchHistory()
     
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error(error)
-    ElMessage.error(error.message || '提交过程中发生错误')
-    fetchMaterials()
+    const message = error instanceof Error ? error.message : '提交过程中发生错误'
+    ElMessage.error(message)
     fetchHistory()
   } finally {
     submitting.value = false
@@ -246,7 +285,6 @@ const submitBatch = async () => {
 }
 
 onMounted(() => {
-  fetchMaterials()
   fetchWarehouses()
   fetchHistory()
 })
@@ -278,19 +316,16 @@ onMounted(() => {
               <!-- Existing Material Selector -->
               <template v-if="!isNewMaterial">
                 <el-form-item label="选择备品">
-                  <el-select 
-                    v-model="selectedMaterialId" 
-                    placeholder="请选择备品" 
-                    filterable
-                    style="width: 100%"
-                  >
-                    <el-option
-                      v-for="item in materials"
-                      :key="item.id"
-                      :label="`${item.material_id} - ${item.name} (库存: ${item.quantity})`"
-                      :value="item.id"
+                  <div style="display: flex; gap: 10px; width: 100%;">
+                    <el-input 
+                      :value="selectedMaterial ? `${selectedMaterial.name} (${selectedMaterial.model_number || '无型号'})` : ''" 
+                      placeholder="请点击查找按钮选择备品" 
+                      readonly 
+                      @click="openMaterialDialog"
+                      style="flex: 1"
                     />
-                  </el-select>
+                    <el-button type="primary" :icon="Search" @click="openMaterialDialog">查找</el-button>
+                  </div>
                 </el-form-item>
               </template>
 
@@ -420,6 +455,44 @@ onMounted(() => {
         </div>
       </el-tab-pane>
     </el-tabs>
+    <el-dialog v-model="selectMaterialVisible" title="选择备品" width="800px">
+      <div style="margin-bottom: 20px; display: flex; gap: 10px;">
+        <el-input 
+          v-model="dialogSearch" 
+          placeholder="搜索名称、型号、用途..." 
+          @keyup.enter="fetchDialogMaterials" 
+          clearable
+          @clear="fetchDialogMaterials"
+        >
+          <template #append>
+            <el-button :icon="Search" @click="fetchDialogMaterials" />
+          </template>
+        </el-input>
+      </div>
+      
+      <el-table :data="dialogMaterials" v-loading="dialogLoading" border stripe @row-click="selectMaterial" style="cursor: pointer">
+        <el-table-column prop="name" label="名称" />
+        <el-table-column prop="model_number" label="型号" />
+        <el-table-column prop="usage" label="用途" />
+        <el-table-column prop="quantity" label="当前库存" width="100" />
+        <el-table-column label="操作" width="80" align="center">
+          <template #default>
+            <el-button type="primary" link size="small">选择</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+      
+      <div style="margin-top: 20px; display: flex; justify-content: flex-end">
+        <el-pagination
+          background
+          layout="prev, pager, next"
+          :total="dialogTotal"
+          :page-size="10"
+          v-model:current-page="dialogPage"
+          @current-change="handleDialogPageChange"
+        />
+      </div>
+    </el-dialog>
   </div>
 </template>
 

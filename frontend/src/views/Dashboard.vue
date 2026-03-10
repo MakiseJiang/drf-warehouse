@@ -1,11 +1,13 @@
 <script setup lang="ts">
+defineOptions({ name: 'WarehouseDashboard' })
+
 import { ref, onMounted, computed } from 'vue'
 import http from '../http'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 import { PieChart, BarChart } from 'echarts/charts'
 import { TitleComponent, TooltipComponent, LegendComponent, GridComponent } from 'echarts/components'
-import VChart, { THEME_KEY } from 'vue-echarts'
+import VChart from 'vue-echarts'
 
 use([
   CanvasRenderer,

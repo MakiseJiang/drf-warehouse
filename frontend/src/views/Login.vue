@@ -1,4 +1,6 @@
 <script setup lang="ts">
+defineOptions({ name: 'WarehouseLogin' })
+
 import { ref } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { ElMessage } from 'element-plus'
@@ -19,7 +21,7 @@ const handleLogin = async () => {
   try {
     await authStore.login(username.value, password.value)
     ElMessage.success('登录成功')
-  } catch (err) {
+  } catch {
     error.value = '用户名或密码错误'
   } finally {
     loading.value = false
