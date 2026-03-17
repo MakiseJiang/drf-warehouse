@@ -11,6 +11,7 @@ class MaterialSerializer(serializers.ModelSerializer):
 class TransactionSerializer(serializers.ModelSerializer):
     material_name = serializers.ReadOnlyField(source='material.name')
     material_code = serializers.ReadOnlyField(source='material.material_id')
+    material_model = serializers.ReadOnlyField(source='material.model_number')
 
     class Meta:
         model = Transaction

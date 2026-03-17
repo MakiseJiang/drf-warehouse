@@ -19,16 +19,23 @@ interface Material {
 const materials = ref<Material[]>([])
 const loading = ref(false)
 const searchQuery = ref('')
+const currentPage = ref(1)
+const pageSize = ref(10)
+const total = ref(0)
 
 const fetchMaterials = async () => {
   loading.value = true
   try {
-    const params: Record<string, string | number> = { page_size: 100 }
+    const params: Record<string, string | number> = {
+      page: currentPage.value,
+      page_size: pageSize.value
+    }
     if (searchQuery.value) {
       params.search = searchQuery.value
     }
     const response = await http.get('/materials/', { params })
     materials.value = response.data.results
+    total.value = response.data.count
   } catch {
     ElMessage.error('获取备品数据失败')
   } finally {
@@ -37,6 +44,12 @@ const fetchMaterials = async () => {
 }
 
 const handleSearch = () => {
+  currentPage.value = 1
+  fetchMaterials()
+}
+
+const handlePageChange = (page: number) => {
+  currentPage.value = page
   fetchMaterials()
 }
 
@@ -76,6 +89,17 @@ onMounted(() => {
         </template>
       </el-table-column>
     </el-table>
+
+    <div class="pagination">
+      <el-pagination
+        background
+        layout="prev, pager, next"
+        :total="total"
+        :page-size="pageSize"
+        v-model:current-page="currentPage"
+        @current-change="handlePageChange"
+      />
+    </div>
   </div>
 </template>
 
@@ -87,5 +111,10 @@ onMounted(() => {
   margin-bottom: 20px;
   display: flex;
   gap: 10px;
+}
+.pagination {
+  margin-top: 20px;
+  display: flex;
+  justify-content: flex-end;
 }
 </style>

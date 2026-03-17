@@ -14,6 +14,7 @@ interface Transaction {
   date: string
   material_name: string
   material_code: string
+  material_model: string
   remark?: string
   operator?: string
 }
@@ -440,6 +441,7 @@ onMounted(() => {
           </el-table-column>
           <el-table-column prop="material_code" label="备品ID" width="100" />
           <el-table-column prop="material_name" label="备品名称" width="120" />
+          <el-table-column prop="material_model" label="备品型号" width="120" />
           <el-table-column prop="quantity" label="数量" width="80" />
           <el-table-column prop="operator" label="操作人" width="100" />
           <el-table-column prop="remark" label="备注" />
